@@ -4,6 +4,7 @@ import os
 import sys
 sys.path.append("..")
 import random
+import math
 
 import torch
 import numpy as np
@@ -138,9 +139,9 @@ def iou_xywh_torch(boxes1, boxes2):
     return IOU
 
 
-def GIOU_xywh_torch(boxes1, boxes2):
+def giou_xywh_torch(boxes1, boxes2):
     """
-    GIOU
+    GIOU (Generalized-IoU)
     # https://arxiv.org/abs/1902.09630
     args:
         boxes1/boxes2: torch.size([..., (x, y, w, h)]). The value is for original image.
@@ -173,6 +174,97 @@ def GIOU_xywh_torch(boxes1, boxes2):
 
     GIOU = IOU - 1.0 * (enclose_area - union_area) / enclose_area
     return GIOU
+
+
+def ciou_xywh_torch(boxes1, boxes2):
+    """
+    CIOU (Complete-IoU)
+    # https://arxiv.org/abs/1911.08287
+    args:
+        boxes1/boxes2: torch.size([..., (x, y, w, h)]). The value is for original image.
+    """
+    # xywh -> xyxy
+    boxes1 = torch.cat([boxes1[..., :2] - boxes1[..., 2:] * 0.5,
+                        boxes1[..., :2] + boxes1[..., 2:] * 0.5], dim = -1)
+    boxes2 = torch.cat([boxes2[..., :2] - boxes2[..., 2:] * 0.5,
+                        boxes2[..., :2] + boxes2[..., 2:] * 0.5], dim = -1)
+
+    boxes1 = torch.cat([torch.min(boxes1[..., :2], boxes1[..., 2:]),
+                        torch.max(boxes1[..., :2], boxes1[..., 2:])], dim = -1)
+    boxes2 = torch.cat([torch.min(boxes2[..., :2], boxes2[..., 2:]),
+                        torch.max(boxes2[..., :2], boxes2[..., 2:])], dim = -1)
+
+    boxes1_area = (boxes1[..., 2] - boxes1[..., 0]) * (boxes1[..., 3] - boxes1[..., 1])
+    boxes2_area = (boxes2[..., 2] - boxes2[..., 0]) * (boxes2[..., 3] - boxes2[..., 1])
+
+    inter_left_up = torch.max(boxes1[..., :2], boxes2[..., :2])
+    inter_right_down = torch.min(boxes1[..., 2:], boxes2[..., 2:])
+    inter_section = torch.max(inter_right_down - inter_left_up, torch.zeros_like(inter_right_down))
+    inter_area = inter_section[..., 0] * inter_section[..., 1]
+    union_area = boxes1_area + boxes2_area - inter_area
+    IOU = 1.0 * inter_area / union_area
+
+    # cal outer boxes
+    outer_left_up = torch.min(boxes1[..., :2], boxes2[..., :2])
+    outer_right_down = torch.max(boxes1[..., 2:], boxes2[..., 2:])
+    outer = torch.max(outer_right_down - outer_left_up, torch.zeros_like(inter_right_down))
+    outer_diagonal_line = torch.pow(outer[..., 0], 2) + torch.pow(outer[..., 1], 2)
+
+    # cal center distance
+    boxes1_center = (boxes1[..., :2] + boxes1[..., 2:]) * 0.5
+    boxes2_center = (boxes2[..., :2] + boxes2[..., 2:]) * 0.5
+    center_dis = (torch.pow(boxes1_center[..., 0] - boxes2_center[..., 0], 2) +
+                  torch.pow(boxes1_center[..., 1] - boxes2_center[..., 1], 2))
+
+    # cal penalty term
+    # cal width and height
+    boxes1_size = torch.max(boxes1[..., 2:] - boxes1[..., :2], torch.zeros_like(inter_right_down))
+    boxes2_size = torch.max(boxes2[..., 2:] - boxes2[..., :2], torch.zeros_like(inter_right_down))
+    v = (4 / (math.pi ** 2)) * torch.pow(
+        torch.atan((boxes1_size[..., 0] / torch.clamp(boxes1_size[..., 1], min = 1e-6))) -
+        torch.atan((boxes2_size[..., 0] / torch.clamp(boxes2_size[..., 1], min = 1e-6))), 2)
+    alpha = v / (1 - IOU + v)
+
+    CIOU = IOU - (center_dis / outer_diagonal_line + alpha * v)
+    return CIOU
+
+
+def diou_xyxy_numpy(boxes1, boxes2):
+    """
+    DIOU (Distance-IoU)
+    # https://arxiv.org/abs/1911.08287
+    """
+    boxes1 = np.array(boxes1)
+    boxes2 = np.array(boxes2)
+
+    boxes1_area = (boxes1[..., 2] - boxes1[..., 0]) * (boxes1[..., 3] - boxes1[..., 1])
+    boxes2_area = (boxes2[..., 2] - boxes2[..., 0]) * (boxes2[..., 3] - boxes2[..., 1])
+
+    # 计算出boxes1和boxes2相交部分的左上角坐标、右下角坐标
+    left_up = np.maximum(boxes1[..., :2], boxes2[..., :2])
+    right_down = np.minimum(boxes1[..., 2:], boxes2[..., 2:])
+
+    # 计算出boxes1和boxes2相交部分的宽、高
+    # 因为两个boxes没有交集时，(right_down - left_up) < 0，所以maximum可以保证当两个boxes没有交集时，它们之间的iou为0
+    inter_section = np.maximum(right_down - left_up, 0.0)
+    inter_area = inter_section[..., 0] * inter_section[..., 1]
+    union_area = boxes1_area + boxes2_area - inter_area
+    IOU = 1.0 * inter_area / union_area
+
+    # cal outer boxes
+    outer_left_up = np.minimum(boxes1[..., :2], boxes2[..., :2])
+    outer_right_down = np.maximum(boxes1[..., 2:], boxes2[..., 2:])
+    outer = np.maximum(outer_right_down - outer_left_up, 0.0)
+    outer_diagonal_line = np.square(outer[..., 0]) + np.square(outer[..., 1])
+
+    # cal center distance
+    boxes1_center = (boxes1[..., :2] + boxes1[..., 2:]) * 0.5
+    boxes2_center = (boxes2[..., :2] + boxes2[..., 2:]) * 0.5
+    center_dis = (np.square(boxes1_center[..., 0] - boxes2_center[..., 0]) +
+                  np.square(boxes1_center[..., 1] - boxes2_center[..., 1]))
+
+    DIOU = IOU - center_dis / outer_diagonal_line
+    return DIOU
 
 
 def nms(bboxes, score_thresh = 0.05, iou_thresh = 0.5, sigma = 0.3, method = "nms"):

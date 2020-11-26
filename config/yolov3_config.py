@@ -3,12 +3,10 @@
 import os
 
 DATASET_PATH = "/home/marina/Workspace/Dataset"
-# DATASET_PATH = "/media/d/Workspace/Dataset"
 VOC_PATH = os.path.join(DATASET_PATH, "VOCdevkit0712")
 COCO_PATH = os.path.join(DATASET_PATH, "MSCOCO2017")
 
 PROJECT_PATH = "/home/marina/Workspace/YOLOv3"
-# PROJECT_PATH = "/media/d/Workspace/YOLOv3"
 TRAIN_ANNO_PATH = os.path.join(PROJECT_PATH, "data", "train_annotation.txt")
 TEST_ANNO_PATH = os.path.join(PROJECT_PATH, "data", "test_annotation.txt")
 

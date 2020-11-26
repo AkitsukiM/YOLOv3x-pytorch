@@ -128,62 +128,73 @@ wget https://pjreddie.com/media/files/darknet53_448.weights
 ## YOLOv4
 
 - [ ] Backbone
-    - [ ] CSPDarknet53
+    - [x] CSPDarknet53
+        - [ ] enabled
 - [ ] Neck
     - [ ] SPP
     - [ ] PAN
 - [x] Head
     - [x] YOLOv3
 - [ ] Bag of Freebies (BoF) for backbone
-    - [ ] CutMix and Mosaic data augmentation
+    - [x] CutMix and Mosaic data augmentation
     - [ ] DropBlock regularization
     - [x] Class label smoothing
 - [ ] Bag of Specials (BoS) for backbone
-    - [ ] Mish activation
-    - [ ] Cross-stage partial connections (CSP)
+    - [x] Mish activation
+        - [ ] enabled
+    - [x] Cross-stage partial connections (CSP)
+        - [ ] enabled
     - [ ] Multi-input weighted residual connections (MiWRC)
 - [ ] Bag of Freebies (BoF) for detector
-    - [ ] CIoU-loss
+    - [x] CIoU-loss
     - [ ] CmBN
     - [ ] DropBlock regularization
-    - [ ] Mosaic data augmentation
+    - [x] Mosaic data augmentation
     - [ ] Self-Adversarial Training
     - [ ] Eliminate grid sensitivity
-    - [ ] Using multiple anchors for a single ground truth
-    - [ ] Cosine annealing scheduler
+    - [x] Using multiple anchors for a single ground truth
+    - [x] Cosine annealing scheduler
     - [ ] Optimal hyperparameters
     - [ ] Random training shapes
 - [ ] Bag of Specials (BoS) for detector
-    - [ ] Mish activation
+    - [x] Mish activation
+        - [ ] enabled
     - [ ] SPP-block
     - [ ] SAM-block
     - [ ] PAN path-aggregation block
-    - [ ] DIoU-NMS
+    - [x] DIoU-NMS
+        - [ ] enabled
 
 ## 测试结果
 
 ### PASCAL VOC数据集
 
+* YOLOv3 (last updated)
 * 使用单个NVIDIA RTX2080Ti
 * 数据集位于固态硬盘
 
 > 使用固态硬盘与机械硬盘存在很大区别
 
-* 训练时长约10小时，测试时长约2分钟
-* 截至目前共训练-测试3次
+* 训练时长约11小时，测试时长约2分钟
+* 截至目前共训练-测试4次
 ```
 # TEST_IMG_SIZE = 416
- mAP ∈ [0.8202, 0.8240]
+ mAP ∈ [0.8336, 0.8364]
 ```
 
 > 对于残差层，用conv-bn-relu-conv-bn-(+resi)-relu代替conv-bn-relu-conv-bn-relu-(+resi)会导致mAP下降约0.10
 > 对于损失函数，用BCE代替Focal Loss会导致mAP下降约0.03
+> 实现Cosine annealing scheduler, mAP提升了0.006
+> 实现CutMix and Mosaic data augmentation, mAP提升了0.008
+> 实现CIoU-loss, mAP提升了0.002
+> 尝试实现DIoU-NMS, mAP下降了0.001
+> 尝试实现CSPDarknet53+Mish activation，失败
 
 ### MS COCO数据集
 
+* YOLOv3
 * 使用单个NVIDIA RTX2080Ti
 * 数据集位于固态硬盘
-
 * 训练时长约70小时，测试时长约2.5分钟
 * 截至目前共训练-测试1次
 ```
@@ -212,5 +223,5 @@ wget https://pjreddie.com/media/files/darknet53_448.weights
 
 Copyright (c) 2020 Marina Akitsuki. All rights reserved.
 
-Date modified: 2020/11/23
+Date modified: 2020/11/26
 

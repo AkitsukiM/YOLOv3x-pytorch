@@ -128,6 +128,83 @@ class Resize(object):
         return image
 
 
+class Mosaic(object):
+    """
+    Mosaic数据增强（兼容CutMix数据增强）
+    """
+    def __init__(self, p = 0.5):
+        self.p = p
+
+    def __call__(self, img1, bboxes1, img2, bboxes2, img3 = None, bboxes3 = None, img4 = None, bboxes4 = None):
+        if random.random() < self.p:
+            # [img1] [img2]
+            # [img3] [img4]
+            if img3 is None:
+                img3 = np.copy(img1)
+            if bboxes3 is None:
+                bboxes3 = np.copy(bboxes1)
+            if img4 is None:
+                img4 = np.copy(img2)
+            if bboxes4 is None:
+                bboxes4 = np.copy(bboxes2)
+
+            h_img1, w_img1, _ = img1.shape
+            h_img2, w_img2, _ = img2.shape
+            h_img3, w_img3, _ = img3.shape
+            h_img4, w_img4, _ = img4.shape
+            h_img = min(h_img1, h_img2, h_img3, h_img4)
+            w_img = min(w_img1, w_img2, w_img3, w_img4)
+            h_cut = random.randint(0, h_img)
+            w_cut = random.randint(0, w_img)
+            h_dut = h_img - h_cut
+            w_dut = w_img - w_cut
+
+            # img1
+            img = img1[0:h_img, 0:w_img]
+            bboxes1 = self.__crop_bboxes(bboxes1,
+                                         0,
+                                         0,
+                                         w_cut,
+                                         h_cut)
+            # img2
+            img[0:h_cut, w_cut:w_img] = img2[0:h_cut, w_img2 - w_dut:w_img2]
+            bboxes2 = self.__crop_bboxes(bboxes2,
+                                         w_img2 - w_dut,
+                                         0,
+                                         w_img2,
+                                         h_cut)
+            bboxes2[:, [0, 2]] = bboxes2[:, [0, 2]] + (w_img - w_img2)
+            # img3
+            img[h_cut:h_img, 0:w_cut] = img3[h_img3 - h_dut:h_img3, 0:w_cut]
+            bboxes3 = self.__crop_bboxes(bboxes3,
+                                         0,
+                                         h_img3 - h_dut,
+                                         w_cut,
+                                         h_img3)
+            bboxes3[:, [1, 3]] = bboxes3[:, [1, 3]] + (h_img - h_img3)
+            # img4
+            img[h_cut:h_img, w_cut:w_img] = img4[h_img4 - h_dut:h_img4, w_img4 - w_dut:w_img4]
+            bboxes4 = self.__crop_bboxes(bboxes4,
+                                         w_img4 - w_dut,
+                                         h_img4 - h_dut,
+                                         w_img4,
+                                         h_img4)
+            bboxes4[:, [0, 2]] = bboxes4[:, [0, 2]] + (w_img - w_img4)
+            bboxes4[:, [1, 3]] = bboxes4[:, [1, 3]] + (h_img - h_img4)
+            bboxes = np.concatenate([bboxes1, bboxes2, bboxes3, bboxes4])
+        else:
+            img = img1
+            bboxes = bboxes1
+
+        return img, bboxes
+
+    def __crop_bboxes(self, bboxes, xmin, ymin, xmax, ymax):
+        bboxes = np.concatenate([np.maximum(bboxes[:, 0:2], [xmin, ymin]),
+                                 np.minimum(bboxes[:, 2:4], [xmax, ymax]),
+                                 bboxes[:, 4:]], axis = -1)
+        return bboxes
+
+
 class Mixup(object):
     """
     Mixup: Beyond Empirical Risk Minimization
@@ -194,11 +271,23 @@ class UnivDataset(Dataset):
         return self.__annolen
 
     def __getitem__(self, item):
-        img_org, bboxes_org = self.__parse_annotation(item) # 这里parse后的还是实际值
+        img1, bboxes1 = self.__parse_annotation(item)
+
+        item2 = random.randint(0, self.__annolen - 1)
+        item3 = random.randint(0, self.__annolen - 1)
+        item4 = random.randint(0, self.__annolen - 1)
+
+        img2, bboxes2 = self.__parse_annotation(item2)
+        img3, bboxes3 = self.__parse_annotation(item3)
+        img4, bboxes4 = self.__parse_annotation(item4)
+
+        img_org, bboxes_org = Mosaic()(img1, bboxes1, img2, bboxes2, img3, bboxes3, img4, bboxes4)
+        img_org, bboxes_org = self.__basic_data_augmentation(img_org, bboxes_org)
         img_org = img_org.transpose(2, 0, 1) # (h, w, c)维度变成(c, h, w)维度
 
         item_mix = random.randint(0, self.__annolen - 1)
         img_mix, bboxes_mix = self.__parse_annotation(item_mix)
+        img_mix, bboxes_mix = self.__basic_data_augmentation(img_mix, bboxes_mix)
         img_mix = img_mix.transpose(2, 0, 1) # (h, w, c)维度变成(c, h, w)维度
 
         # 混合样本数据增强
@@ -237,14 +326,13 @@ class UnivDataset(Dataset):
 
     def __parse_annotation(self, item):
         """
-        将加载的单个annotation转换成实例并进行数据增强
+        将加载的单个annotation转换成实例
         args:
             item: int
         returns:
             img:
             bboxes:
         notes:
-            数据增强包括随机翻转、随机剪裁、随机仿射
             bboxes依然是以图片大小为参考的实际值
         """
         if self.mode == "+voc":
@@ -271,6 +359,12 @@ class UnivDataset(Dataset):
                 bboxes = np.array([[ann["bbox"][0], ann["bbox"][1], ann["bbox"][0] + ann["bbox"][2], ann["bbox"][1] + ann["bbox"][3],
                                     self.__catIds.index(ann["category_id"])] for ann in anns])
 
+        return img, bboxes
+
+    def __basic_data_augmentation(self, img, bboxes):
+        """
+        基本数据增强：随机翻转、随机剪裁、随机仿射
+        """
         img, bboxes = RandomHorizontalFilp()(np.copy(img), np.copy(bboxes))
         img, bboxes = RandomCrop()(np.copy(img), np.copy(bboxes))
         img, bboxes = RandomAffine()(np.copy(img), np.copy(bboxes))

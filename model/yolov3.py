@@ -9,6 +9,7 @@ import numpy as np
 
 import config.yolov3_config as cfg
 from model.backbones.darknet53 import Darknet53
+from model.backbones.cspdarknet53 import CSPDarknet53
 from model.head.yolo_head import Head_yolov3
 from model.layers.blocks_module import ConvBlock
 from model.necks.yolo_fpn import FPN_yolov3

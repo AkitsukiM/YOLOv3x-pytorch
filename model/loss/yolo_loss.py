@@ -33,16 +33,16 @@ class Loss_yolov3(nn.Module):
     def forward(self, p, p_d, label_s, label_m, label_l, bboxes_s, bboxes_m, bboxes_l):
         """
         """
-        loss_s, loss_giou_s, loss_conf_s, loss_cls_s = self.__cal_loss_per_layer(p[0], p_d[0], label_s, bboxes_s, self.__strides[0])
-        loss_m, loss_giou_m, loss_conf_m, loss_cls_m = self.__cal_loss_per_layer(p[1], p_d[1], label_m, bboxes_m, self.__strides[1])
-        loss_l, loss_giou_l, loss_conf_l, loss_cls_l = self.__cal_loss_per_layer(p[2], p_d[2], label_l, bboxes_l, self.__strides[2])
+        loss_s, loss_iou_s, loss_conf_s, loss_cls_s = self.__cal_loss_per_layer(p[0], p_d[0], label_s, bboxes_s, self.__strides[0])
+        loss_m, loss_iou_m, loss_conf_m, loss_cls_m = self.__cal_loss_per_layer(p[1], p_d[1], label_m, bboxes_m, self.__strides[1])
+        loss_l, loss_iou_l, loss_conf_l, loss_cls_l = self.__cal_loss_per_layer(p[2], p_d[2], label_l, bboxes_l, self.__strides[2])
 
         loss = loss_l + loss_m + loss_s
-        loss_giou = loss_giou_s + loss_giou_m + loss_giou_l
+        loss_iou = loss_iou_s + loss_iou_m + loss_iou_l
         loss_conf = loss_conf_s + loss_conf_m + loss_conf_l
         loss_cls = loss_cls_s + loss_cls_m + loss_cls_l
 
-        return loss, loss_giou, loss_conf, loss_cls
+        return loss, loss_iou, loss_conf, loss_cls
 
     def __cal_loss_per_layer(self, p, p_d, label, bboxes, stride):
         """
@@ -63,12 +63,12 @@ class Loss_yolov3(nn.Module):
         label_mix = label[..., 5:6]
         label_cls = label[..., 6:]
 
-        # ##### loss giou #####
-        giou = tools.GIOU_xywh_torch(pred_xywh, label_xywh).unsqueeze(-1)
+        # ##### loss iou #####
+        iou = tools.ciou_xywh_torch(pred_xywh, label_xywh).unsqueeze(-1)
 
         # The scaled weight of bbox is used to balance the impact of small objects and large objects on loss.
         bbox_loss_scale = 2.0 - 1.0 * label_xywh[..., 2:3] * label_xywh[..., 3:4] / (img_size ** 2)
-        loss_giou = label_obj_mask * bbox_loss_scale * (1.0 - giou) * label_mix
+        loss_iou = label_obj_mask * bbox_loss_scale * (1.0 - iou) * label_mix
 
         # ##### loss confidence #####
         iou = tools.iou_xywh_torch(pred_xywh.unsqueeze(4), bboxes.unsqueeze(1).unsqueeze(1).unsqueeze(1))
@@ -81,12 +81,12 @@ class Loss_yolov3(nn.Module):
         # ##### loss classes #####
         loss_cls = label_obj_mask * BCE(input = pred_cls, target = label_cls) * label_mix
 
-        loss_giou = (torch.sum(loss_giou)) / batch_size
+        loss_iou = (torch.sum(loss_iou)) / batch_size
         loss_conf = (torch.sum(loss_conf)) / batch_size
         loss_cls = (torch.sum(loss_cls)) / batch_size
-        loss = loss_giou + loss_conf + loss_cls
+        loss = loss_iou + loss_conf + loss_cls
 
-        return loss, loss_giou, loss_conf, loss_cls
+        return loss, loss_iou, loss_conf, loss_cls
 
 
 
@@ -102,6 +102,6 @@ if __name__ == "__main__":
     bboxes_m = torch.rand(3, 60, 4)
     bboxes_l = torch.rand(3, 60, 4)
 
-    loss, loss_giou, loss_conf, loss_cls = Loss_yolov3(cfg.MODEL["STRIDES"])(p, p_d, label_s, label_m, label_l, bboxes_s, bboxes_m, bboxes_l)
+    loss, loss_iou, loss_conf, loss_cls = Loss_yolov3(cfg.MODEL["STRIDES"])(p, p_d, label_s, label_m, label_l, bboxes_s, bboxes_m, bboxes_l)
     print(loss)
 

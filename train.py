@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 # import torch.optim.lr_scheduler as lr_scheduler
 from torch.utils.data import DataLoader
+import numpy as np
 import argparse
 # from tensorboardX import SummaryWriter
 
@@ -122,18 +123,20 @@ class Trainer(object):
         for epoch in range(self.__start_epoch, self.__epochs):
             self.__model.train()
 
-            if epoch in self.__lr_decay_epochs:
-                current_lr = self.__optimizer.param_groups[0]["lr"] / 10
-                for param_group in self.__optimizer.param_groups:
-                    param_group["lr"] = current_lr
-
             mloss = 0
             for i, (imgs, label_s, label_m, label_l, bboxes_s, bboxes_m, bboxes_l) in enumerate(self.__train_dataloader):
 
                 if epoch < self.__warmup_epochs:
-                    current_lr = self.__lr_init * (epoch * self.__batches + i + 1) / (self.__warmup_epochs * self.__batches)
+                    new_lr = (epoch * self.__batches + i + 1) / (self.__warmup_epochs * self.__batches) * self.__lr_init
                     for param_group in self.__optimizer.param_groups:
-                        param_group["lr"] = current_lr
+                        param_group["lr"] = new_lr
+                else: # y = cos(x) + 1, x ∈ [0, π], y ∈ [2, 0]
+                    new_lr = ((np.cos(((epoch - self.__warmup_epochs) * self.__batches + i + 1) # 当前过了多少个batch
+                                    / ((self.__epochs - self.__warmup_epochs) * self.__batches) # 除以总的batch数
+                                    * np.pi) + 1) * 0.5                                         # 乘以pi加上1乘以0.5得到纵轴上的归一化结果
+                              * (self.__lr_init - self.__lr_end) + self.__lr_end)               # 放缩
+                    for param_group in self.__optimizer.param_groups:
+                        param_group["lr"] = new_lr
 
                 imgs = imgs.to(self.__device)
                 label_s = label_s.to(self.__device)
@@ -145,7 +148,7 @@ class Trainer(object):
 
                 p, p_d = self.__model(imgs)
 
-                loss, loss_giou, loss_conf, loss_cls = self.__criterion(p, p_d, label_s, label_m, label_l, bboxes_s, bboxes_m, bboxes_l)
+                loss, loss_iou, loss_conf, loss_cls = self.__criterion(p, p_d, label_s, label_m, label_l, bboxes_s, bboxes_m, bboxes_l)
 
                 self.__optimizer.zero_grad()
                 loss.backward()
