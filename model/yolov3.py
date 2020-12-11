@@ -12,14 +12,14 @@ from model.backbones.darknet53 import Darknet53
 from model.backbones.cspdarknet53 import CSPDarknet53
 from model.head.yolo_head import Head_yolov3
 from model.layers.blocks_module import ConvBlock
-from model.necks.yolo_fpn import FPN_yolov3
+from model.necks.yolo_fpn import FPN_yolov3, PAN_yolov3
 from utils.tools import *
 
 
 class Model_yolov3(nn.Module):
     """
     Model_yolov3
-    def __init args:
+    def __init__ args:
         num_classes: int
         init_weights: bool = True
     def forward returns:
@@ -34,7 +34,8 @@ class Model_yolov3(nn.Module):
         self.__out_channels = cfg.MODEL["ANCHORS_PER_SCLAE"] * (self.__num_classes + 5)
 
         self.__backnone = Darknet53()
-        self.__fpn = FPN_yolov3(filters_in = [1024, 512, 256], filters_out = [self.__out_channels, self.__out_channels, self.__out_channels])
+        # print(self.__backnone)
+        self.__fpn = PAN_yolov3(filters_in = [256, 512, 1024], filters_out = [self.__out_channels, self.__out_channels, self.__out_channels])
 
         # small
         self.__head_s = Head_yolov3(num_classes = self.__num_classes, anchors = self.__anchors[0], stride = self.__strides[0])
@@ -49,7 +50,7 @@ class Model_yolov3(nn.Module):
 
     def forward(self, x):
         x_s, x_m, x_l = self.__backnone(x)
-        x_s, x_m, x_l = self.__fpn(x_l, x_m, x_s)
+        x_s, x_m, x_l = self.__fpn(x_s, x_m, x_l)
 
         out = []
         out.append(self.__head_s(x_s))
@@ -95,9 +96,13 @@ class Model_yolov3(nn.Module):
         for m in self.modules():
             if isinstance(m, ConvBlock):
                 # only initing backbone conv's weights
+                # cutoff:
+                # Darknet: 52
+                # CSPDarkNet: 72
                 if count == cutoff:
                     break
                 count += 1
+                # print(count, m)
 
                 conv_layer = m._ConvBlock__conv_layer
                 if m.norm == "bn":

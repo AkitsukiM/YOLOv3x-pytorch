@@ -5,12 +5,31 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class Mish(nn.Module):
-    def __init__(self):
-        super(Mish, self).__init__()
+class SwishImplementation(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        return x * torch.sigmoid(x)
 
-    def forward(self, x):
-        return x * torch.tanh(F.softplus(x))
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_tensors[0]
+        sx = torch.sigmoid(x)  # sigmoid(ctx)
+        return grad_output * (sx * (1 + x * (1 - sx)))
+
+
+class MishImplementation(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        return x.mul(torch.tanh(F.softplus(x)))  # x * tanh(ln(1 + exp(x)))
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x = ctx.saved_tensors[0]
+        sx = torch.sigmoid(x)
+        fx = F.softplus(x).tanh()
+        return grad_output * (fx + x * sx * (1 - fx * fx))
 
 
 norm_name = {
@@ -19,7 +38,8 @@ activate_name = {
     "relu": nn.ReLU(inplace = True),
     "leaky": nn.LeakyReLU(negative_slope = 0.1, inplace = True),
     "linear": nn.Identity(),
-    "mish": Mish()}
+    "mish": MishImplementation.apply,
+    "swish": SwishImplementation.apply}
 
 
 class ConvBlock(nn.Module):

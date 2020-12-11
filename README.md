@@ -25,6 +25,7 @@
 ········├─ model  
 ················├─ backbones  
 ························├─ \_\_init\_\_.py  
+························├─ cspdarknet53.py  
 ························└─ darknet53.py  
 ················├─ head  
 ························├─ \_\_init\_\_.py  
@@ -132,7 +133,7 @@ wget https://pjreddie.com/media/files/darknet53_448.weights
         - [ ] enabled
 - [ ] Neck
     - [ ] SPP
-    - [ ] PAN
+    - [x] PAN
 - [x] Head
     - [x] YOLOv3
 - [ ] Bag of Freebies (BoF) for backbone
@@ -161,7 +162,7 @@ wget https://pjreddie.com/media/files/darknet53_448.weights
         - [ ] enabled
     - [ ] SPP-block
     - [ ] SAM-block
-    - [ ] PAN path-aggregation block
+    - [x] PAN path-aggregation block
     - [x] DIoU-NMS
         - [ ] enabled
 
@@ -173,44 +174,46 @@ wget https://pjreddie.com/media/files/darknet53_448.weights
 * 使用单个NVIDIA RTX2080Ti
 * 数据集位于固态硬盘
 
-> 使用固态硬盘与机械硬盘存在很大区别
+> 使用固态硬盘与机械硬盘存在很大区别  
 
-* 训练时长约11小时，测试时长约2分钟
-* 截至目前共训练-测试4次
-```
-# TEST_IMG_SIZE = 416
- mAP ∈ [0.8336, 0.8364]
-```
-
-> 对于残差层，用conv-bn-relu-conv-bn-(+resi)-relu代替conv-bn-relu-conv-bn-relu-(+resi)会导致mAP下降约0.10
-> 对于损失函数，用BCE代替Focal Loss会导致mAP下降约0.03
-> 实现Cosine annealing scheduler, mAP提升了0.006
-> 实现CutMix and Mosaic data augmentation, mAP提升了0.008
-> 实现CIoU-loss, mAP提升了0.002
-> 尝试实现DIoU-NMS, mAP下降了0.001
-> 尝试实现CSPDarknet53+Mish activation，失败
-
-### MS COCO数据集
-
-* YOLOv3
-* 使用单个NVIDIA RTX2080Ti
-* 数据集位于固态硬盘
-* 训练时长约70小时，测试时长约2.5分钟
+* 训练时长约12小时，测试时长约2分钟
 * 截至目前共训练-测试1次
 ```
 # TEST_IMG_SIZE = 416
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.282
- Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.516
- Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.281
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.121
- Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.304
- Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.418
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.238
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.375
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.401
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.199
- Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.437
- Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.550
+ mAP ∈ {0.8418}
+```
+
+> 对于残差层，用conv-bn-relu-conv-bn-(+resi)-relu代替conv-bn-relu-conv-bn-relu-(+resi)会导致mAP下降约0.10  
+> 对于损失函数，用BCE代替Focal Loss会导致mAP下降约0.03  
+> 尝试实现Cosine annealing scheduler，mAP提升了0.006  
+> 尝试实现CutMix and Mosaic data augmentation，mAP提升了0.008  
+> 尝试实现CIoU-loss，mAP提升了0.002  
+> 尝试实现DIoU-NMS，mAP下降了0.001  
+> 尝试实现CSPDarknet53+Mish activation，mAP下降了0.20，失败！  
+> 尝试实现PANet，mAP提升了0.006  
+
+### MS COCO数据集
+
+* YOLOv3 (last updated)
+* 使用单个NVIDIA RTX2080Ti
+* 数据集位于固态硬盘
+* 训练时长约99小时，测试时长约2分钟
+* 截至目前共训练-测试1次
+```
+# TEST_IMG_SIZE = 416
+ FPS: ~40 (v3: 35; v4: 38)
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.304 (v3: 0.310; v4: 0.412)
+ Average Precision  (AP) @[ IoU=0.50      | area=   all | maxDets=100 ] = 0.536 (v3: 0.553; v4: 0.628)
+ Average Precision  (AP) @[ IoU=0.75      | area=   all | maxDets=100 ] = 0.308 (v3: 0.323; v4: 0.443)
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.123 (v3: 0.152; v4: 0.204)
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.326 (v3: 0.332; v4: 0.444)
+ Average Precision  (AP) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.463 (v3: 0.428; v4: 0.560)
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ] = 0.255
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ] = 0.395
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=   all | maxDets=100 ] = 0.422
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.205
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.461
+ Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.593
 ```
 
 ## 参考代码
@@ -223,5 +226,5 @@ wget https://pjreddie.com/media/files/darknet53_448.weights
 
 Copyright (c) 2020 Marina Akitsuki. All rights reserved.
 
-Date modified: 2020/11/26
+Date modified: 2020/12/11
 

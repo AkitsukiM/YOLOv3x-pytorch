@@ -17,14 +17,6 @@ class Upsample(nn.Module):
 
 
 class Route(nn.Module):
-    """
-    Route
-    forward args:
-        x1: previous output
-        x2: current output
-    notes:
-        cat in dim = 1
-    """
     def __init__(self):
         super(Route, self).__init__()
 
@@ -40,70 +32,184 @@ class FPN_yolov3(nn.Module):
     def __init__(self, filters_in, filters_out):
         super(FPN_yolov3, self).__init__()
 
-        fi_0, fi_1, fi_2 = filters_in
-        fo_0, fo_1, fo_2 = filters_out
+        fi_s, fi_m, fi_l = filters_in
+        fo_s, fo_m, fo_l = filters_out
 
-        # large的输出
-        self.__conv_set_0 = nn.Sequential(
-            ConvBlock(fi_0, 512, kernel_size = 1, norm = "bn", activate = "leaky"),
+        # large的特征图
+        self.__conv_l_set = nn.Sequential(
+            ConvBlock(fi_l, 512, kernel_size = 1, norm = "bn", activate = "leaky"),
             ConvBlock(512, 1024, kernel_size = 3, norm = "bn", activate = "leaky"),
             ConvBlock(1024, 512, kernel_size = 1, norm = "bn", activate = "leaky"),
             ConvBlock(512, 1024, kernel_size = 3, norm = "bn", activate = "leaky"),
             ConvBlock(1024, 512, kernel_size = 1, norm = "bn", activate = "leaky"))
-        self.__conv0_0 = ConvBlock(512, 1024, kernel_size = 3, norm = "bn", activate = "leaky")
-        self.__conv0_1 = ConvBlock(1024, fo_0, kernel_size = 1) # 没有bn和relu
+        # large的上传支路
+        self.__conv_l_up = ConvBlock(512, 256, kernel_size = 1, norm = "bn", activate = "leaky")
+        self.__upsample_l = Upsample(scale_factor = 2)
+        self.__route_l = Route()
 
-        # large分出去的支路
-        self.__conv0 = ConvBlock(512, 256, kernel_size = 1, norm = "bn", activate = "leaky")
-        self.__upsample0 = Upsample(scale_factor = 2)
-        self.__route0 = Route()
-
-        # medium的输出
-        self.__conv_set_1 = nn.Sequential(
-            ConvBlock(fi_1 + 256, 256, kernel_size = 1, norm = "bn", activate = "leaky"),
+        # medium的特征图
+        self.__conv_m_set = nn.Sequential(
+            ConvBlock(fi_m + 256, 256, kernel_size = 1, norm = "bn", activate = "leaky"),
             ConvBlock(256, 512, kernel_size = 3, norm = "bn", activate = "leaky"),
             ConvBlock(512, 256, kernel_size = 1, norm = "bn", activate = "leaky"),
             ConvBlock(256, 512, kernel_size = 3, norm = "bn", activate = "leaky"),
             ConvBlock(512, 256, kernel_size = 1, norm = "bn", activate = "leaky"))
-        self.__conv1_0 = ConvBlock(256, 512, kernel_size = 3, norm = "bn", activate = "leaky")
-        self.__conv1_1 = ConvBlock(512, fo_1, kernel_size = 1) # 没有bn和relu
+        # medium的上传支路
+        self.__conv_m_up = ConvBlock(256, 128, kernel_size = 1, norm = "bn", activate = "leaky")
+        self.__upsample_m = Upsample(scale_factor = 2)
+        self.__route_m = Route()
 
-        # medium分出去的支路
-        self.__conv1 = ConvBlock(256, 128, kernel_size = 1, norm = "bn", activate = "leaky")
-        self.__upsample1 = Upsample(scale_factor = 2)
-        self.__route1 = Route()
-
-        # small的输出
-        self.__conv_set_2 = nn.Sequential(
-            ConvBlock(fi_2 + 128, 128, kernel_size = 1, norm = "bn", activate = "leaky"),
+        # small的特征图
+        self.__conv_s_set = nn.Sequential(
+            ConvBlock(fi_s + 128, 128, kernel_size = 1, norm = "bn", activate = "leaky"),
             ConvBlock(128, 256, kernel_size = 3, norm = "bn", activate = "leaky"),
             ConvBlock(256, 128, kernel_size = 1, norm = "bn", activate = "leaky"),
             ConvBlock(128, 256, kernel_size = 3, norm = "bn", activate = "leaky"),
             ConvBlock(256, 128, kernel_size = 1, norm = "bn", activate = "leaky"))
-        self.__conv2_0 = ConvBlock(128, 256, kernel_size = 3, norm = "bn", activate = "leaky")
-        self.__conv2_1 = ConvBlock(256, fo_2, kernel_size = 1) # 没有bn和relu
 
-    def forward(self, x0, x1, x2):
+        # large的输出支路
+        self.__conv_l_out0 = ConvBlock(512, 1024, kernel_size = 3, norm = "bn", activate = "leaky")
+        self.__conv_l_out1 = ConvBlock(1024, fo_l, kernel_size = 1) # 没有bn和relu
+        # medium的输出支路
+        self.__conv_m_out0 = ConvBlock(256, 512, kernel_size = 3, norm = "bn", activate = "leaky")
+        self.__conv_m_out1 = ConvBlock(512, fo_m, kernel_size = 1) # 没有bn和relu
+        # small的输出支路
+        self.__conv_s_out0 = ConvBlock(128, 256, kernel_size = 3, norm = "bn", activate = "leaky")
+        self.__conv_s_out1 = ConvBlock(256, fo_s, kernel_size = 1) # 没有bn和relu
+
+    def forward(self, x_s, x_m, x_l):
         """
-        注意这里的输入顺序是large, medium, small，输出顺序是small, medium, large
         """
-        r0 = self.__conv_set_0(x0)
-        out0 = self.__conv0_0(r0)
-        out0 = self.__conv0_1(out0) # feature map for large objects
+        # large的特征图
+        p_l = self.__conv_l_set(x_l)
+        # large的上传支路
+        r_l = self.__conv_l_up(p_l)
+        r_l = self.__upsample_l(r_l)
+        x_m = self.__route_l(x_m, r_l)
 
-        r1 = self.__conv0(r0)
-        r1 = self.__upsample0(r1)
-        x1 = self.__route0(x1, r1)
-        r1 = self.__conv_set_1(x1)
-        out1 = self.__conv1_0(r1)
-        out1 = self.__conv1_1(out1) # feature map for medium objects
+        # medium的特征图
+        p_m = self.__conv_m_set(x_m)
+        # medium的上传支路
+        r_m = self.__conv_m_up(p_m)
+        r_m = self.__upsample_m(r_m)
+        x_s = self.__route_m(x_s, r_m)
 
-        r2 = self.__conv1(r1)
-        r2 = self.__upsample1(r2)
-        x2 = self.__route1(x2, r2)
-        r2 = self.__conv_set_2(x2)
-        out2 = self.__conv2_0(r2)
-        out2 = self.__conv2_1(out2) # feature map for small objects
+        # small的特征图
+        p_s = self.__conv_s_set(x_s)
 
-        return out2, out1, out0
+        # large的输出支路
+        o_l = self.__conv_l_out0(p_l)
+        o_l = self.__conv_l_out1(o_l)
+        # medium的输出支路
+        o_m = self.__conv_m_out0(p_m)
+        o_m = self.__conv_m_out1(o_m)
+        # small的输出支路
+        o_s = self.__conv_s_out0(p_s)
+        o_s = self.__conv_s_out1(o_s)
+
+        return o_s, o_m, o_l
+
+
+class PAN_yolov3(nn.Module):
+    """
+    """
+    def __init__(self, filters_in, filters_out):
+        super(PAN_yolov3, self).__init__()
+
+        fi_s, fi_m, fi_l = filters_in
+        fo_s, fo_m, fo_l = filters_out
+
+        # large的特征图
+        self.__conv_l_set = nn.Sequential(
+            ConvBlock(fi_l, 512, kernel_size = 1, norm = "bn", activate = "leaky"),
+            ConvBlock(512, 1024, kernel_size = 3, norm = "bn", activate = "leaky"),
+            ConvBlock(1024, 512, kernel_size = 1, norm = "bn", activate = "leaky"),
+            ConvBlock(512, 1024, kernel_size = 3, norm = "bn", activate = "leaky"),
+            ConvBlock(1024, 512, kernel_size = 1, norm = "bn", activate = "leaky"))
+        # large的上传支路
+        self.__conv_l_up = ConvBlock(512, 256, kernel_size = 1, norm = "bn", activate = "leaky")
+        self.__upsample_l = Upsample(scale_factor = 2)
+        self.__route_l = Route()
+
+        # medium的特征图
+        self.__conv_m_set = nn.Sequential(
+            ConvBlock(fi_m + 256, 256, kernel_size = 1, norm = "bn", activate = "leaky"),
+            ConvBlock(256, 512, kernel_size = 3, norm = "bn", activate = "leaky"),
+            ConvBlock(512, 256, kernel_size = 1, norm = "bn", activate = "leaky"),
+            ConvBlock(256, 512, kernel_size = 3, norm = "bn", activate = "leaky"),
+            ConvBlock(512, 256, kernel_size = 1, norm = "bn", activate = "leaky"))
+        # medium的上传支路
+        self.__conv_m_up = ConvBlock(256, 128, kernel_size = 1, norm = "bn", activate = "leaky")
+        self.__upsample_m = Upsample(scale_factor = 2)
+        self.__route_m = Route()
+
+        # small的特征图
+        self.__conv_s_set = nn.Sequential(
+            ConvBlock(fi_s + 128, 128, kernel_size = 1, norm = "bn", activate = "leaky"),
+            ConvBlock(128, 256, kernel_size = 3, norm = "bn", activate = "leaky"),
+            ConvBlock(256, 128, kernel_size = 1, norm = "bn", activate = "leaky"),
+            ConvBlock(128, 256, kernel_size = 3, norm = "bn", activate = "leaky"),
+            ConvBlock(256, 128, kernel_size = 1, norm = "bn", activate = "leaky"))
+
+        # small的第二特征图
+        # 即small的特征图
+        # medium的第二特征图
+        self.__conv_s_down0 = ConvBlock(128, 256, kernel_size = 3, stride = 2, norm = "bn", activate = "leaky")
+        self.__conv_s_down1 = ConvBlock(256, 256, kernel_size = 3, norm = "bn", activate = "leaky")
+        # large的第二特征图
+        self.__conv_m_down0 = ConvBlock(256, 512, kernel_size = 3, stride = 2, norm = "bn", activate = "leaky")
+        self.__conv_m_down1 = ConvBlock(512, 512, kernel_size = 3, norm = "bn", activate = "leaky")
+
+        # large的输出支路
+        self.__conv_l_out0 = ConvBlock(512, 1024, kernel_size = 3, norm = "bn", activate = "leaky")
+        self.__conv_l_out1 = ConvBlock(1024, fo_l, kernel_size = 1) # 没有bn和relu
+        # medium的输出支路
+        self.__conv_m_out0 = ConvBlock(256, 512, kernel_size = 3, norm = "bn", activate = "leaky")
+        self.__conv_m_out1 = ConvBlock(512, fo_m, kernel_size = 1) # 没有bn和relu
+        # small的输出支路
+        self.__conv_s_out0 = ConvBlock(128, 256, kernel_size = 3, norm = "bn", activate = "leaky")
+        self.__conv_s_out1 = ConvBlock(256, fo_s, kernel_size = 1) # 没有bn和relu
+
+    def forward(self, x_s, x_m, x_l):
+        """
+        """
+        # large的特征图
+        p_l = self.__conv_l_set(x_l)
+        # large的上传支路
+        r_l = self.__conv_l_up(p_l)
+        r_l = self.__upsample_l(r_l)
+        x_m = self.__route_l(x_m, r_l)
+
+        # medium的特征图
+        p_m = self.__conv_m_set(x_m)
+        # medium的上传支路
+        r_m = self.__conv_m_up(p_m)
+        r_m = self.__upsample_m(r_m)
+        x_s = self.__route_m(x_s, r_m)
+
+        # small的特征图
+        p_s = self.__conv_s_set(x_s)
+
+        # small的第二特征图
+        n_s = p_s
+        # medium的第二特征图
+        rr_s = self.__conv_s_down0(n_s)
+        n_m = p_m + rr_s
+        n_m = self.__conv_s_down1(n_m)
+        # large的第二特征图
+        rr_m = self.__conv_m_down0(n_m)
+        n_l = p_l + rr_m
+        n_l = self.__conv_m_down1(n_l)
+
+        # large的输出支路
+        o_l = self.__conv_l_out0(n_l)
+        o_l = self.__conv_l_out1(o_l)
+        # medium的输出支路
+        o_m = self.__conv_m_out0(n_m)
+        o_m = self.__conv_m_out1(o_m)
+        # small的输出支路
+        o_s = self.__conv_s_out0(n_s)
+        o_s = self.__conv_s_out1(o_s)
+
+        return o_s, o_m, o_l
 

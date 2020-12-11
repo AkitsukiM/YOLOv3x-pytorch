@@ -3,34 +3,6 @@
 import torch
 import torch.nn as nn
 from ..layers.blocks_module import *
-from ..layers.attention_module import *
-
-
-class CSPBlock(nn.Module):
-    """
-    residual只支持in_channels == out_channels
-    """
-    def __init__(self, in_channels, out_channels, mid_channels = None, attention = None):
-        super(CSPBlock, self).__init__()
-
-        if mid_channels is None:
-            mid_channels = out_channels
-
-        self.__conv1 = ConvBlock(in_channels, mid_channels, kernel_size = 1, norm = "bn", activate = "leaky")
-        self.__conv2 = ConvBlock(mid_channels, out_channels, kernel_size = 3, norm = "bn", activate = "leaky")
-
-        self.attention = attention
-        if self.attention is not None:
-            self.attention_module = attention_name[self.attention](out_channels)
-
-    def forward(self, x):
-        identity = x
-        y = self.__conv1(x)
-        y = self.__conv2(y)
-        if self.attention is not None:
-            y = self.attention_module(y)
-        out = y + identity
-        return out
 
 
 class CSPFirstStage(nn.Module):
@@ -42,7 +14,7 @@ class CSPFirstStage(nn.Module):
         self.splita_conv = ConvBlock(out_channels, out_channels, kernel_size = 1, norm = "bn", activate = "leaky")   # a分支
         self.splitb_conv = ConvBlock(out_channels, out_channels, kernel_size = 1, norm = "bn", activate = "leaky")   # b分支
         self.blocks_conv = nn.Sequential(                                                                           # b分支
-            CSPBlock(out_channels, out_channels, mid_channels = in_channels),
+            ResiBlock(out_channels, out_channels, mid_channels = in_channels),
             ConvBlock(out_channels, out_channels, kernel_size = 1, norm = "bn", activate = "leaky"))
 
         self.concat_conv = ConvBlock(out_channels * 2, out_channels, kernel_size = 1, norm = "bn", activate = "leaky")
@@ -69,7 +41,7 @@ class CSPStage(nn.Module):
         self.splita_conv = ConvBlock(out_channels, out_channels // 2, kernel_size = 1, norm = "bn", activate = "leaky")  # a分支
         self.splitb_conv = ConvBlock(out_channels, out_channels // 2, kernel_size = 1, norm = "bn", activate = "leaky")  # b分支
         self.blocks_conv = nn.Sequential(                                                                               # b分支
-            *[CSPBlock(out_channels // 2, out_channels // 2) for _ in range(num_blocks)],
+            *[ResiBlock(out_channels // 2, out_channels // 2) for _ in range(num_blocks)],
             ConvBlock(out_channels // 2, out_channels // 2, kernel_size = 1, norm = "bn", activate = "leaky"))
 
         self.concat_conv = ConvBlock(out_channels, out_channels, kernel_size = 1, norm = "bn", activate = "leaky")
