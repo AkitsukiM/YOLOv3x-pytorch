@@ -43,6 +43,7 @@
 ················└─ yolov3.py  
 ········├─ utils  
 ················├─ \_\_init\_\_.py  
+················├─ augmentation.py  
 ················├─ datasets.py  
 ················├─ gpu.py  
 ················├─ tools.py  
@@ -52,7 +53,9 @@
 ········├─ train.py  
 ········├─ voc.py  
 ········├─ data  
+················└─ \_\_init\_\_.txt  
 ········└─ weight  
+················├─ \_\_init\_\_.txt  
 ················└─ darknet53\_448.weights  
 
 ## Dependency
@@ -171,16 +174,20 @@ wget https://pjreddie.com/media/files/darknet53_448.weights
 ### PASCAL VOC数据集
 
 * YOLOv3 (last updated)
-* 使用单个NVIDIA RTX2080Ti
+* 使用单个NVIDIA RTX2080Ti, num_workers = 4
+```shell
+# 通过以下命令获取服务器的CPU核心数
+cat /proc/cpuinfo | grep "cpu cores" | uniq
+```
 * 数据集位于固态硬盘
 
 > 使用固态硬盘与机械硬盘存在很大区别  
 
-* 训练时长约12小时，测试时长约2分钟
-* 截至目前共训练-测试1次
+* 训练时长约10小时，测试时长约2分钟
+* 截至目前共训练-测试3次
 ```
 # TEST_IMG_SIZE = 416
- mAP ∈ {0.8418}
+ mAP ∈ {0.8412, 0.8369, 0.8384}
 ```
 
 > 对于残差层，用conv-bn-relu-conv-bn-(+resi)-relu代替conv-bn-relu-conv-bn-relu-(+resi)会导致mAP下降约0.10  
@@ -194,7 +201,7 @@ wget https://pjreddie.com/media/files/darknet53_448.weights
 
 ### MS COCO数据集
 
-* YOLOv3 (last updated)
+* YOLOv3
 * 使用单个NVIDIA RTX2080Ti
 * 数据集位于固态硬盘
 * 训练时长约99小时，测试时长约2分钟
@@ -222,9 +229,11 @@ wget https://pjreddie.com/media/files/darknet53_448.weights
 
 [2] https://github.com/argusswift/YOLOv4-pytorch
 
+[3] https://github.com/libo-coder/yolo_v4_pytorch3
+
 -----
 
-Copyright (c) 2020 Marina Akitsuki. All rights reserved.
+Copyright (c) 2020-2021 Marina Akitsuki. All rights reserved.
 
-Date modified: 2020/12/11
+Date modified: 2021/01/20
 

@@ -15,216 +15,7 @@ import cv2
 import config.yolov3_config as cfg
 import utils.tools as tools
 
-
-class RandomHorizontalFilp(object):
-    def __init__(self, p = 0.5):
-        self.p = p
-
-    def __call__(self, img, bboxes):
-        if random.random() < self.p:
-            _, w_img, _ = img.shape
-            # img = np.fliplr(img)
-            img = img[:, ::-1, :]
-            bboxes[:, [0, 2]] = w_img - bboxes[:, [2, 0]]
-
-        return img, bboxes
-
-
-class RandomCrop(object):
-    def __init__(self, p = 0.5):
-        self.p = p
-
-    def __call__(self, img, bboxes):
-        # random.random() 方法返回随机生成的一个实数，它在 [0, 1) 范围内。
-        # random.uniform() 方法返回随机生成的一个实数，它在 [x, y) 范围内。
-        if random.random() < self.p:
-            h_img, w_img, _ = img.shape
-
-            max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis = 0), np.max(bboxes[:, 2:4], axis = 0)], axis = -1)
-            max_l_trans = max_bbox[0]
-            max_u_trans = max_bbox[1]
-            max_r_trans = w_img - max_bbox[2]
-            max_d_trans = h_img - max_bbox[3]
-
-            crop_xmin = max(0, int(max_bbox[0] - random.uniform(0, max_l_trans)))
-            crop_ymin = max(0, int(max_bbox[1] - random.uniform(0, max_u_trans)))
-            crop_xmax = min(w_img, int(max_bbox[2] + random.uniform(0, max_r_trans)))
-            crop_ymax = min(h_img, int(max_bbox[3] + random.uniform(0, max_d_trans)))
-
-            img = img[crop_ymin : crop_ymax, crop_xmin : crop_xmax]
-
-            bboxes[:, [0, 2]] = bboxes[:, [0, 2]] - crop_xmin
-            bboxes[:, [1, 3]] = bboxes[:, [1, 3]] - crop_ymin
-
-        return img, bboxes
-
-
-class RandomAffine(object):
-    def __init__(self, p = 0.5):
-        self.p = p
-
-    def __call__(self, img, bboxes):
-        if random.random() < self.p:
-            h_img, w_img, _ = img.shape
-
-            max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis = 0), np.max(bboxes[:, 2:4], axis = 0)], axis = -1)
-            max_l_trans = max_bbox[0]
-            max_u_trans = max_bbox[1]
-            max_r_trans = w_img - max_bbox[2]
-            max_d_trans = h_img - max_bbox[3]
-
-            tx = random.uniform(-(max_l_trans - 1), (max_r_trans - 1))
-            ty = random.uniform(-(max_u_trans - 1), (max_d_trans - 1))
-
-            M = np.array([[1, 0, tx], [0, 1, ty]])
-            img = cv2.warpAffine(img, M, (w_img, h_img))
-
-            bboxes[:, [0, 2]] = bboxes[:, [0, 2]] + tx
-            bboxes[:, [1, 3]] = bboxes[:, [1, 3]] + ty
-
-        return img, bboxes
-
-
-class Resize(object):
-    """
-    调整图片大小
-    __init__ args:
-        target_shape: (h_target, w_target)，调整后的图片大小
-        correct_box: bool = False，对框也进行对应调整
-    __call__ args:
-        img: 待调整的图片
-        bboxes: default = None，待调整的框，实际值
-    returns:
-        image: 调整后的图片
-        bboxes: 调整后的框（如果correct_box == True），实际值
-    notes:
-        将图片转为目标大小，BGR转换为RGB，归一化到[0, 1]上
-        bboxes依然是以图片大小为参考的实际值
-    """
-    def __init__(self, target_shape, correct_box = False):
-        self.h_target, self.w_target = target_shape
-        self.correct_box = correct_box
-
-    def __call__(self, img, bboxes = None):
-        h_org, w_org, _= img.shape
-
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32)
-
-        resize_ratio = min(1.0 * self.w_target / w_org, 1.0 * self.h_target / h_org)
-        resize_w = max(int(resize_ratio * w_org), 1) # 防止放缩后为0
-        resize_h = max(int(resize_ratio * h_org), 1) # 防止放缩后为0
-        image_resized = cv2.resize(img, (resize_w, resize_h))
-
-        image_paded = np.full((self.h_target, self.w_target, 3), 128.0) # 填充而非拉伸
-        dw = int((self.w_target - resize_w) / 2)
-        dh = int((self.h_target - resize_h) / 2)
-        image_paded[dh:resize_h + dh, dw:resize_w + dw, :] = image_resized
-        image = image_paded / 255.0  # normalize to [0, 1]
-
-        if self.correct_box:
-            bboxes[:, [0, 2]] = bboxes[:, [0, 2]] * resize_ratio + dw
-            bboxes[:, [1, 3]] = bboxes[:, [1, 3]] * resize_ratio + dh
-            return image, bboxes
-        return image
-
-
-class Mosaic(object):
-    """
-    Mosaic数据增强（兼容CutMix数据增强）
-    """
-    def __init__(self, p = 0.5):
-        self.p = p
-
-    def __call__(self, img1, bboxes1, img2, bboxes2, img3 = None, bboxes3 = None, img4 = None, bboxes4 = None):
-        if random.random() < self.p:
-            # [img1] [img2]
-            # [img3] [img4]
-            if img3 is None:
-                img3 = np.copy(img1)
-            if bboxes3 is None:
-                bboxes3 = np.copy(bboxes1)
-            if img4 is None:
-                img4 = np.copy(img2)
-            if bboxes4 is None:
-                bboxes4 = np.copy(bboxes2)
-
-            h_img1, w_img1, _ = img1.shape
-            h_img2, w_img2, _ = img2.shape
-            h_img3, w_img3, _ = img3.shape
-            h_img4, w_img4, _ = img4.shape
-            h_img = min(h_img1, h_img2, h_img3, h_img4)
-            w_img = min(w_img1, w_img2, w_img3, w_img4)
-            h_cut = random.randint(0, h_img)
-            w_cut = random.randint(0, w_img)
-            h_dut = h_img - h_cut
-            w_dut = w_img - w_cut
-
-            # img1
-            img = img1[0:h_img, 0:w_img]
-            bboxes1 = self.__crop_bboxes(bboxes1,
-                                         0,
-                                         0,
-                                         w_cut,
-                                         h_cut)
-            # img2
-            img[0:h_cut, w_cut:w_img] = img2[0:h_cut, w_img2 - w_dut:w_img2]
-            bboxes2 = self.__crop_bboxes(bboxes2,
-                                         w_img2 - w_dut,
-                                         0,
-                                         w_img2,
-                                         h_cut)
-            bboxes2[:, [0, 2]] = bboxes2[:, [0, 2]] + (w_img - w_img2)
-            # img3
-            img[h_cut:h_img, 0:w_cut] = img3[h_img3 - h_dut:h_img3, 0:w_cut]
-            bboxes3 = self.__crop_bboxes(bboxes3,
-                                         0,
-                                         h_img3 - h_dut,
-                                         w_cut,
-                                         h_img3)
-            bboxes3[:, [1, 3]] = bboxes3[:, [1, 3]] + (h_img - h_img3)
-            # img4
-            img[h_cut:h_img, w_cut:w_img] = img4[h_img4 - h_dut:h_img4, w_img4 - w_dut:w_img4]
-            bboxes4 = self.__crop_bboxes(bboxes4,
-                                         w_img4 - w_dut,
-                                         h_img4 - h_dut,
-                                         w_img4,
-                                         h_img4)
-            bboxes4[:, [0, 2]] = bboxes4[:, [0, 2]] + (w_img - w_img4)
-            bboxes4[:, [1, 3]] = bboxes4[:, [1, 3]] + (h_img - h_img4)
-            bboxes = np.concatenate([bboxes1, bboxes2, bboxes3, bboxes4])
-        else:
-            img = img1
-            bboxes = bboxes1
-
-        return img, bboxes
-
-    def __crop_bboxes(self, bboxes, xmin, ymin, xmax, ymax):
-        bboxes = np.concatenate([np.maximum(bboxes[:, 0:2], [xmin, ymin]),
-                                 np.minimum(bboxes[:, 2:4], [xmax, ymax]),
-                                 bboxes[:, 4:]], axis = -1)
-        return bboxes
-
-
-class Mixup(object):
-    """
-    Mixup: Beyond Empirical Risk Minimization
-    # https://arxiv.org/abs/1710.09412
-    """
-    def __init__(self, p = 0.5):
-        self.p = p
-
-    def __call__(self, img_org, bboxes_org, img_mix, bboxes_mix):
-        if random.random() < self.p:
-            lam = np.random.beta(1.5, 1.5)
-            img = lam * img_org + (1 - lam) * img_mix
-            bboxes_org = np.concatenate([bboxes_org, np.full((len(bboxes_org), 1), lam)], axis = 1) # mix = lam
-            bboxes_mix = np.concatenate([bboxes_mix, np.full((len(bboxes_mix), 1), 1.0 - lam)], axis = 1) # mix = (1.0 - lam)
-            bboxes = np.concatenate([bboxes_org, bboxes_mix])
-        else:
-            img = img_org
-            bboxes = np.concatenate([bboxes_org, np.full((len(bboxes_org), 1), 1.0)], axis = 1) # mix = 1.0
-
-        return img, bboxes
+from utils.augmentation import *
 
 
 class LabelSmooth(object):
@@ -281,7 +72,7 @@ class UnivDataset(Dataset):
         img3, bboxes3 = self.__parse_annotation(item3)
         img4, bboxes4 = self.__parse_annotation(item4)
 
-        img_org, bboxes_org = Mosaic()(img1, bboxes1, img2, bboxes2, img3, bboxes3, img4, bboxes4)
+        img_org, bboxes_org = Mosaic_v2(self.img_size)([img1, img2, img3, img4], [bboxes1, bboxes2, bboxes3, bboxes4])
         img_org, bboxes_org = self.__basic_data_augmentation(img_org, bboxes_org)
         img_org = img_org.transpose(2, 0, 1) # (h, w, c)维度变成(c, h, w)维度
 
@@ -363,11 +154,11 @@ class UnivDataset(Dataset):
 
     def __basic_data_augmentation(self, img, bboxes):
         """
-        基本数据增强：随机翻转、随机剪裁、随机仿射
+        基本数据增强：随机翻转、随机裁剪、随机仿射
         """
         img, bboxes = RandomHorizontalFilp()(np.copy(img), np.copy(bboxes))
         img, bboxes = RandomCrop()(np.copy(img), np.copy(bboxes))
-        img, bboxes = RandomAffine()(np.copy(img), np.copy(bboxes))
+        img, bboxes = RandomAffine_v2()(np.copy(img), np.copy(bboxes))
         img, bboxes = Resize((self.img_size, self.img_size), correct_box = True)(np.copy(img), np.copy(bboxes))
 
         return img, bboxes

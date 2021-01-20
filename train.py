@@ -24,12 +24,14 @@ class Trainer(object):
     Trainer
     def __init__ args:
         gpu_id: int = 0, gpu id
+        num_workers: int = 0, number of workers
         weight_path: default = None, the file path of weight or None
         mode: default = None, "+voc" or "+coco" or None
         resume: bool = False, resume training flag
     """
-    def __init__(self, gpu_id = 0, weight_path = None, mode = None, resume = False):
+    def __init__(self, gpu_id = 0, num_workers = 0, weight_path = None, mode = None, resume = False):
         self.gpu_id = gpu_id
+        self.num_workers = num_workers
         self.weight_path = weight_path
         self.mode = mode
         self.resume = resume
@@ -48,9 +50,8 @@ class Trainer(object):
 
         self.__train_img_size = cfg.TRAIN["TRAIN_IMG_SIZE"]
         self.__batch_size = cfg.TRAIN["BATCH_SIZE"]
-        self.__num_workers = cfg.TRAIN["NUM_WORKERS"]
         self.__epochs = cfg.TRAIN["EPOCHS"]
-        self.__lr_decay_epochs = cfg.TRAIN["LR_DECAY_EPOCHS"]
+        # self.__lr_decay_epochs = cfg.TRAIN["LR_DECAY_EPOCHS"]
         self.__warmup_epochs = cfg.TRAIN["WARMUP_EPOCHS"]
         self.__momentum = cfg.TRAIN["MOMENTUM"]
         self.__weight_decay = cfg.TRAIN["WEIGHT_DECAY"]
@@ -58,11 +59,11 @@ class Trainer(object):
         self.__lr_end = cfg.TRAIN["LR_END"]
         self.__iou_threshold_loss = cfg.TRAIN["IOU_THRESHOLD_LOSS"]
         self.__multi_scale_train = cfg.TRAIN["MULTI_SCALE_TRAIN"]
-        self.__augment = cfg.TRAIN["AUGMENT"]
+        # self.__augment = cfg.TRAIN["AUGMENT"]
 
-        self.__device = select_device(gpu_id)
+        self.__device = select_device(self.gpu_id)
         self.__train_dataset = UnivDataset(mode = self.mode, img_size = self.__train_img_size, num_classes = self.__num_classes)
-        self.__train_dataloader = DataLoader(dataset = self.__train_dataset, batch_size = self.__batch_size, num_workers = self.__num_workers, shuffle = True)
+        self.__train_dataloader = DataLoader(dataset = self.__train_dataset, batch_size = self.__batch_size, num_workers = self.num_workers, shuffle = True)
         self.__batches = len(self.__train_dataloader)
         self.__start_epoch = 0
         self.__best_mAP = 0.
@@ -128,15 +129,14 @@ class Trainer(object):
 
                 if epoch < self.__warmup_epochs:
                     new_lr = (epoch * self.__batches + i + 1) / (self.__warmup_epochs * self.__batches) * self.__lr_init
-                    for param_group in self.__optimizer.param_groups:
-                        param_group["lr"] = new_lr
-                else: # y = cos(x) + 1, x ∈ [0, π], y ∈ [2, 0]
+                else:
+                    # y = cos(x), x ∈ [0, π], y ∈ [1, -1]
                     new_lr = ((np.cos(((epoch - self.__warmup_epochs) * self.__batches + i + 1) # 当前过了多少个batch
                                     / ((self.__epochs - self.__warmup_epochs) * self.__batches) # 除以总的batch数
                                     * np.pi) + 1) * 0.5                                         # 乘以pi加上1乘以0.5得到纵轴上的归一化结果
                               * (self.__lr_init - self.__lr_end) + self.__lr_end)               # 放缩
-                    for param_group in self.__optimizer.param_groups:
-                        param_group["lr"] = new_lr
+                for param_group in self.__optimizer.param_groups:
+                    param_group["lr"] = new_lr
 
                 imgs = imgs.to(self.__device)
                 label_s = label_s.to(self.__device)
@@ -200,11 +200,12 @@ class Trainer(object):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu_id", type = int, default = 0, help = "gpu id")
+    parser.add_argument("--num_workers", type = int, default = 0, help = "number of workers")
     parser.add_argument("--weight_path", type = str, default = "./weight/darknet53_448.weights", help = "the file path of weight or None")
     parser.add_argument("--mode", type = str, default = "+voc", help = "\"+voc\" or \"+coco\" or None")
     parser.add_argument("--resume", type = bool, default = False, help = "resume training flag")
     opt = parser.parse_args()
 
-    Trainer(gpu_id = opt.gpu_id, weight_path = opt.weight_path, mode = opt.mode, resume = opt.resume).train()
-    # Trainer(gpu_id = opt.gpu_id, weight_path = "./weight/last.pth", mode = opt.mode, resume = True).train()
+    Trainer(gpu_id = opt.gpu_id, num_workers = opt.num_workers, weight_path = opt.weight_path, mode = opt.mode, resume = opt.resume).train()
+    # Trainer(gpu_id = opt.gpu_id, num_workers = opt.num_workers, weight_path = "./weight/last.pth", mode = opt.mode, resume = True).train()
 
