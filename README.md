@@ -51,6 +51,7 @@
 ········├─ coco.py  
 ········├─ test.py  
 ········├─ train.py  
+········├─ video.py  
 ········├─ voc.py  
 ········├─ data  
 ················└─ \_\_init\_\_.txt  
@@ -65,6 +66,7 @@
 - [x] numpy
 - [x] matplotlib
 - [x] opencv-python
+- [x] opencv-contrib-python
 - [x] tqdm
 - [x] argparse
 
@@ -174,7 +176,7 @@ wget https://pjreddie.com/media/files/darknet53_448.weights
 ### PASCAL VOC数据集
 
 * YOLOv3 (last updated)
-* 使用单个NVIDIA RTX2080Ti, num_workers = 4
+* 使用单个NVIDIA RTX2080Ti (num_workers = 4)
 ```shell
 # 通过以下命令获取服务器的CPU核心数
 cat /proc/cpuinfo | grep "cpu cores" | uniq
@@ -223,6 +225,11 @@ cat /proc/cpuinfo | grep "cpu cores" | uniq
  Average Recall     (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.593
 ```
 
+### 原因分析
+
+* 论文源代码要求batch_size = 64, epochs = 200
+* 本代码只能满足batch_size = 8, epochs = 50
+
 ## 参考代码
 
 [1] https://github.com/Peterisfar/YOLOV3
@@ -235,5 +242,5 @@ cat /proc/cpuinfo | grep "cpu cores" | uniq
 
 Copyright (c) 2020-2021 Marina Akitsuki. All rights reserved.
 
-Date modified: 2021/01/20
+Date modified: 2021/03/22
 

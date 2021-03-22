@@ -1,7 +1,7 @@
 import os
 import shutil
 
-from torch.utils.data import DataLoader
+import cv2
 import argparse
 from tqdm import tqdm
 
