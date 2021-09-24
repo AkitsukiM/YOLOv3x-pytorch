@@ -49,8 +49,8 @@ for imgId in tqdm(imgIds):
 
 # 两者是一样的
 # print(id(annotations), id(coco))
-# train2007: 93 1021 / 118287
-# val2007: 63 48 / 5000
+# train2017: 93 1021 / 118287
+# val2017: 63 48 / 5000
 # print(anns_len_max, anns_zero_count)
 # (375, 500)
 # print(aspect_ratio_max, hw)
